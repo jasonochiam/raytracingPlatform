@@ -8,12 +8,14 @@ class Camera{
     private:
         camVec3 position;
         camVec3 direction;
+        camVec3 upAxis;
+        int fov;
+        int aspectRatio;
+
     
     public:
-        Camera(glm::vec3 origin, glm::vec3 direction) : position(origin), direction(position){}
+        Camera(glm::vec3 origin, glm::vec3 direction, glm::vec3 upDir, int fov, int aspectRatio) : position(origin), direction(position), upAxis(upDir), fov(fov), aspectRatio(aspectRatio){}
 
         void movePosition(glm::vec3 newPosition){}
         void moveDirection(glm::vec3 newDirection){}
 };
-
-// init a camera
