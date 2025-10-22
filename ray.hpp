@@ -1,5 +1,5 @@
-#ifndef RAY_H
-#define RAY_H
+#ifndef RAY_HPP
+#define RAY_HPP
 
 #include "glm/glm.hpp"
 
@@ -10,4 +10,5 @@ struct Ray {
     Ray(glm::vec3 o, glm::vec3 &d)
         : origin(o), direction(glm::normalize(d)) {}
 };
-#endif
+
+#endif // RAY_HPP

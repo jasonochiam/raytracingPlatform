@@ -1,57 +1,38 @@
-#ifndef CAMERA_H
-#define CAMERA_H
-
-#include "stdint.h"
-#include "glm/glm.hpp"
-#include "ray.cpp"
+#include "camera.hpp"
 #include <cmath>
 
-using camVec3 = glm::vec3;
-using lightVec3 = glm::vec3;
+camAxis::camAxis(const glm::vec3 &x, const glm::vec3 &y, const glm::vec3 &z)
+    : forward(z), right(x), up(y) {}
 
-class camAxis{
-    private:
-        camVec3 forward;
-        camVec3 right;
-        camVec3 up;
-    
-    public:
-        camAxis(glm::vec3 x, glm::vec3 y, glm::vec3 z) : forward(z), right(x), up(y){}
+Camera::Camera(const glm::vec3 &origin, const camAxis &axis, int fov, float aspectRatio)
+    : position(origin), axis(axis), fov(fov), aspectRatio(aspectRatio) {}
 
-        camVec3 getForward() const { return forward; }
-        camVec3 getRight() const { return right; }
-        camVec3 getUp() const { return up; }
-};
+void Camera::movePosition(const glm::vec3 &newPosition){
+    position = newPosition;
+}
 
-class Camera{
-    private:
-        camVec3 position;
-        camAxis axis;
-        int fov;
-        float aspectRatio;
+void Camera::moveDirection(const glm::vec3 &newDirection){
+    // TODO: direction change
+}
 
-    public:
-        Camera(glm::vec3 origin, camAxis axis, int fov, float aspectRatio) : position(origin), axis(axis), fov(fov), aspectRatio(aspectRatio) {}
+void Camera::rotateCam(){
+    // TODO: camera rotation
+}
 
-        void movePosition(glm::vec3 newPosition){}
-        void moveDirection(glm::vec3 newDirection){}
-        void rotateCam(){}
-        Ray generateRay(int pixelX, int pixelY, int imageWidth, int imageHeight){
-            // pixel coordinates -> NDC in [-1,1], (0,0) at center
-            float ndcX = (2.0f * (pixelX + 0.5f) / imageWidth) - 1.0f;
-            float ndcY = 1.0f - (2.0f * (pixelY + 0.5f) / imageHeight);
-            ndcX *= aspectRatio;
+Ray Camera::generateRay(int pixelX, int pixelY, int imageWidth, int imageHeight) const{
+    // pixel coordinates -> NDC in [-1,1], (0,0) at center
+    float ndcX = (2.0f * (pixelX + 0.5f) / imageWidth) - 1.0f;
+    float ndcY = 1.0f - (2.0f * (pixelY + 0.5f) / imageHeight);
+    ndcX *= aspectRatio;
 
-            float fovRadians = fov * (M_PI / 180.0f);
-            float scale = tan(fovRadians / 2.0f);
-            ndcX *= scale;
-            ndcY *= scale;
+    float fovRadians = fov * (M_PI / 180.0f);
+    float scale = tan(fovRadians / 2.0f);
+    ndcX *= scale;
+    ndcY *= scale;
 
-            glm::vec3 rayDirection = ndcX * axis.getRight() +
-                                    ndcY * axis.getUp() +
-                                    axis.getForward();
+    glm::vec3 rayDirection = ndcX * axis.getRight() +
+                            ndcY * axis.getUp() +
+                            axis.getForward();
 
-            return Ray(position, rayDirection);
-        }
-};
-#endif
+    return Ray(position, rayDirection);
+}
