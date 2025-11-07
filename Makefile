@@ -24,4 +24,4 @@ debug: CXXFLAGS += -g -O0
 debug: clean all
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(TARGET) output1.ppm
