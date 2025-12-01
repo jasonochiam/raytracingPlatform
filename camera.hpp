@@ -34,6 +34,7 @@ class Camera{
         void movePosition(const glm::vec3 &newPosition);
         void moveDirection(const glm::vec3 &newDirection);
         void rotateCam();
+        const glm::vec3 &getPosition() const { return position; }
         Ray generateRay(int pixelX, int pixelY, int imageWidth, int imageHeight) const;
 };
 

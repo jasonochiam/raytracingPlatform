@@ -6,12 +6,28 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <SDL2/SDL.h>
 
 #define IMAGEX 800
 #define IMAGEY 600
 #define FOV 90
 
 int main(){
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+        return 1;
+    }
+
+    SDL_Window* window = SDL_CreateWindow("Ray Tracer", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, IMAGEX, IMAGEY, SDL_WINDOW_SHOWN);
+    if (window == NULL) {
+        std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, IMAGEX, IMAGEY);
+
     /* 
     
     init scene
@@ -36,67 +52,111 @@ int main(){
     camAxis mainAxis = camAxis(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     Camera mainCam = Camera(glm::vec3(0.0f, 0.0f, 0.0f), mainAxis, FOV, (float)IMAGEX / IMAGEY);
 
-    Sphere testSphere(glm::vec3(0.0f, 0.0f, 3.0f), 1.0f);
+    // Create a list of spheres
+    std::vector<Sphere> spheres;
+    spheres.push_back(Sphere(glm::vec3(0.0f, 0.0f, 3.0f), 1.0f));      // Center sphere
+    spheres.push_back(Sphere(glm::vec3(2.0f, 0.0f, 4.0f), 1.0f));      // Right sphere
+    spheres.push_back(Sphere(glm::vec3(-2.0f, 0.0f, 4.0f), 1.0f));     // Left sphere
+
     std::vector<unsigned char> framebuffer(IMAGEX * IMAGEY * 3, 0);
 
     // Light direction for simple Lambertian shading
     glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
 
-    for (int y = 0; y < IMAGEY; y++){
-        for (int x = 0; x < IMAGEX; x++){
-            Ray ray = mainCam.generateRay(x, y, IMAGEX, IMAGEY);
-            float t;
-            bool hit = testSphere.intersect(ray, t);
+    bool quit = false;
+    SDL_Event e;
 
-            glm::vec3 color(0.0f);
-            if (hit){
-                glm::vec3 hitPoint = ray.origin + ray.direction * t;
-                glm::vec3 normal = glm::normalize(hitPoint - testSphere.getCenter());
+    float speed = 0.1f; // Movement speed
 
-                // Lambertian diffuse (clamped)
-                float lambert = glm::max(glm::dot(normal, -lightDir), 0.0f);
-                glm::vec3 baseColor(0.7f, 0.2f, 0.2f);
-                color = baseColor * lambert;
-            } else {
-                // Background gradient
-                float u = float(x) / float(IMAGEX);
-                float v = float(y) / float(IMAGEY);
-                color = glm::mix(glm::vec3(0.6f, 0.8f, 1.0f), glm::vec3(0.2f, 0.3f, 0.5f), v);
+    // FPS Counting variables
+    Uint32 lastTime = SDL_GetTicks();
+    int frameCount = 0;
+
+    while (!quit) {
+        while (SDL_PollEvent(&e) != 0) {
+            if (e.type == SDL_QUIT) {
+                quit = true;
             }
+        }
 
-            // Write to framebuffer (convert to 0-255)
-            int idx = (y * IMAGEX + x) * 3;
-            framebuffer[idx + 0] = (unsigned char)(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
-            framebuffer[idx + 1] = (unsigned char)(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
-            framebuffer[idx + 2] = (unsigned char)(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
+        // Handle Keyboard Input
+        const Uint8* currentKeyStates = SDL_GetKeyboardState(NULL);
+        glm::vec3 moveDir(0.0f);
+
+        if (currentKeyStates[SDL_SCANCODE_W]) moveDir += mainAxis.getForward();
+        if (currentKeyStates[SDL_SCANCODE_S]) moveDir -= mainAxis.getForward();
+        if (currentKeyStates[SDL_SCANCODE_A]) moveDir -= mainAxis.getRight();
+        if (currentKeyStates[SDL_SCANCODE_D]) moveDir += mainAxis.getRight();
+        if (currentKeyStates[SDL_SCANCODE_Q]) moveDir -= mainAxis.getUp();
+        if (currentKeyStates[SDL_SCANCODE_E]) moveDir += mainAxis.getUp();
+
+        if (glm::length(moveDir) > 0.0f) {
+            moveDir = glm::normalize(moveDir) * speed;
+            mainCam.movePosition(mainCam.getPosition() + moveDir);
+        }
+
+        for (int y = 0; y < IMAGEY; y++){
+            for (int x = 0; x < IMAGEX; x++){
+                Ray ray = mainCam.generateRay(x, y, IMAGEX, IMAGEY);
+                
+                float closestT = 10000.0f; // Initialize with a large value
+                int hitSphereIndex = -1;
+
+                // Check intersection with all spheres
+                for (size_t i = 0; i < spheres.size(); i++) {
+                    float t;
+                    if (spheres[i].intersect(ray, t)) {
+                        if (t < closestT) {
+                            closestT = t;
+                            hitSphereIndex = i;
+                        }
+                    }
+                }
+
+                glm::vec3 color(0.0f);
+                if (hitSphereIndex != -1){
+                    glm::vec3 hitPoint = ray.origin + ray.direction * closestT;
+                    glm::vec3 normal = glm::normalize(hitPoint - spheres[hitSphereIndex].getCenter());
+
+                    // Lambertian diffuse (clamped)
+                    float lambert = glm::max(glm::dot(normal, -lightDir), 0.0f);
+                    glm::vec3 baseColor(0.7f, 0.2f, 0.2f);
+                    color = baseColor * lambert;
+                } else {
+                    // Background gradient
+                    float u = float(x) / float(IMAGEX);
+                    float v = float(y) / float(IMAGEY);
+                    color = glm::mix(glm::vec3(0.6f, 0.8f, 1.0f), glm::vec3(0.2f, 0.3f, 0.5f), v);
+                }
+
+                // Write to framebuffer (convert to 0-255)
+                int idx = (y * IMAGEX + x) * 3;
+                framebuffer[idx + 0] = (unsigned char)(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
+                framebuffer[idx + 1] = (unsigned char)(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
+                framebuffer[idx + 2] = (unsigned char)(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
+            }
+        }
+
+        SDL_UpdateTexture(texture, NULL, framebuffer.data(), IMAGEX * 3);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+
+        // Calculate and display FPS
+        frameCount++;
+        Uint32 currentTime = SDL_GetTicks();
+        if (currentTime - lastTime >= 1000) {
+            std::string title = "Ray Tracer - FPS: " + std::to_string(frameCount);
+            SDL_SetWindowTitle(window, title.c_str());
+            frameCount = 0;
+            lastTime = currentTime;
         }
     }
 
-    // Write PPM
-    std::FILE *out = std::fopen("output1.ppm", "wb");
-    if (!out){
-        std::cerr << "Failed to open output1.ppm for writing" << std::endl;
-        return 1;
-    }
-    std::fprintf(out, "P6\n%d %d\n255\n", IMAGEX, IMAGEY);
-    std::fwrite(framebuffer.data(), 1, framebuffer.size(), out);
-    std::fclose(out);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
-    std::cout << "Wrote output1.ppm (" << IMAGEX << "x" << IMAGEY << ")" << std::endl;
-
-    // If running in VS Code terminal, open the file there
-    const char* vscode_ipc_path = std::getenv("VSCODE_IPC_HOOK_CLI");
-    if (vscode_ipc_path) {
-        std::cout << "Opening output1.ppm in VS Code..." << std::endl;
-        std::system("code output1.ppm");
-    } else {
-        // Else open using OS-specific commands
-        #if defined(_WIN32) || defined(_WIN64)
-            std::system("start output1.ppm");
-        #elif defined(__APPLE__)
-            std::system("open output1.ppm");
-        #else
-            std::system("xdg-open output1.ppm");
-        #endif
-    }
+    return 0;
 }
