@@ -1,4 +1,7 @@
 .vscode/
-*.o
-*.ppm
-raytracer
+src/*.o
+src/output1.ppm
+src/raytracer
+benchmark/benchmark
+benchmark/*.o
+benchmark/image.ppm
