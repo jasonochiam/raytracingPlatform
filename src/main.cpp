@@ -36,7 +36,12 @@ int main(){
     camAxis mainAxis = camAxis(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     Camera mainCam = Camera(glm::vec3(0.0f, 0.0f, 0.0f), mainAxis, FOV, (float)IMAGEX / IMAGEY);
 
-    Sphere testSphere(glm::vec3(0.0f, 0.0f, 3.0f), 1.0f);
+    // Create a list of spheres
+    std::vector<Sphere> spheres;
+    spheres.push_back(Sphere(glm::vec3(0.0f, 0.0f, 3.0f), 1.0f));      // Center sphere
+    spheres.push_back(Sphere(glm::vec3(2.0f, 0.0f, 4.0f), 1.0f));      // Right sphere
+    spheres.push_back(Sphere(glm::vec3(-2.0f, 0.0f, 4.0f), 1.0f));     // Left sphere
+
     std::vector<unsigned char> framebuffer(IMAGEX * IMAGEY * 3, 0);
 
     // Light direction for simple Lambertian shading
@@ -45,13 +50,25 @@ int main(){
     for (int y = 0; y < IMAGEY; y++){
         for (int x = 0; x < IMAGEX; x++){
             Ray ray = mainCam.generateRay(x, y, IMAGEX, IMAGEY);
-            float t;
-            bool hit = testSphere.intersect(ray, t);
+            
+            float closestT = 10000.0f; // Initialize with a large value
+            int hitSphereIndex = -1;
+
+            // Check intersection with all spheres
+            for (size_t i = 0; i < spheres.size(); i++) {
+                float t;
+                if (spheres[i].intersect(ray, t)) {
+                    if (t < closestT) {
+                        closestT = t;
+                        hitSphereIndex = i;
+                    }
+                }
+            }
 
             glm::vec3 color(0.0f);
-            if (hit){
-                glm::vec3 hitPoint = ray.origin + ray.direction * t;
-                glm::vec3 normal = glm::normalize(hitPoint - testSphere.getCenter());
+            if (hitSphereIndex != -1){
+                glm::vec3 hitPoint = ray.origin + ray.direction * closestT;
+                glm::vec3 normal = glm::normalize(hitPoint - spheres[hitSphereIndex].getCenter());
 
                 // Lambertian diffuse (clamped)
                 float lambert = glm::max(glm::dot(normal, -lightDir), 0.0f);
