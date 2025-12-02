@@ -1,17 +1,12 @@
 #include <iostream>
 #include <time.h>
 #include <float.h>
-#include <curand_kernel.h>
 #include <vector>
 #include "vec3.h"
 #include "ray.h"
 #include "sphere.h"
 #include "hitable_list.h"
-#include "camera.h"
 
-#define IMAGEX 800
-#define IMAGEY 600
-#define FOV 90
 
 __device__ vec3 color(const ray& ray, hitable **obj){
     hit_record rec;
@@ -34,77 +29,54 @@ __device__ vec3 color(const ray& ray, hitable **obj){
     }
 }
 
-__global__ void render_init(int max_x, int max_y, curandState *rand_state) {
+__global__ void render(vec3 *fb, int max_x, int max_y,
+                       vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin,
+                       hitable **world) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= max_x) || (j >= max_y)) return;
     int pixel_index = j*max_x + i;
-    //Each thread gets same seed, a different sequence number, no offset
-    curand_init(2000, pixel_index, 0, &rand_state[pixel_index]);
+    float u = float(i) / float(max_x);
+    float v = float(j) / float(max_y);
+    ray r(origin, lower_left_corner + u*horizontal + v*vertical);
+    fb[pixel_index] = color(r, world);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
-    int i = threadIdx.x + blockIdx.x * blockDim.x;
-    int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if((i >= max_x) || (j >= max_y)) return;
-    int pixel_index = j*max_x + i;
-    curandState local_rand_state = rand_state[pixel_index];
-    vec3 col(0,0,0);
-    for(int s=0; s < ns; s++) {
-        float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
-        float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
-        ray r = (*cam)->get_ray(u,v);
-        col += color(r, world);
-    }
-    fb[pixel_index] = col/float(ns);
-}
-
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera) {
+__global__ void create_world(hitable **d_list, hitable **d_world) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *(d_list)   = new sphere(vec3(0,0,-1), 0.5);
         *d_world    = new hitable_list(d_list,1);
-        *d_camera   = new camera();
     }
 }
 
-__global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
+__global__ void free_world(hitable **d_list, hitable **d_world) {
     delete *(d_list);
     delete *d_world;
-    delete *d_camera;
 }
 
 int main() {
     int nx = 1200;
     int ny = 600;
-    int ns = 100;
     int tx = 8;
     int ty = 8;
 
-    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
+    std::cerr << "Rendering a " << nx << "x" << ny << " image ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
 
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
 
-    // allocate everything
+    // allocate FB
     vec3 *fb;
     cudaMallocManaged((void **)&fb, fb_size);
 
-    curandState *d_rand_state;
-    cudaMalloc((void **)&d_rand_state, num_pixels*sizeof(curandState));
-
-
+    // make our world of hitables
     hitable **d_list;
-    hitable **d_world;
-    camera **d_camera;
     cudaMalloc((void **)&d_list, 1*sizeof(hitable *));
+    hitable **d_world;
     cudaMalloc((void **)&d_world, sizeof(hitable *));
-    cudaMalloc((void **)&d_camera, sizeof(camera *));
-    
-    // set stack limit, not sure if this is necessary?
-    cudaDeviceSetLimit(cudaLimitStackSize, 4096);
-    
-    create_world<<<1,1>>>(d_list,d_world,d_camera);
+    create_world<<<1,1>>>(d_list,d_world);
+    cudaGetLastError();
     cudaDeviceSynchronize();
 
     clock_t start, stop;
@@ -112,12 +84,14 @@ int main() {
     // Render our buffer
     dim3 blocks(nx/tx+1,ny/ty+1);
     dim3 threads(tx,ty);
-
-    render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+    render<<<blocks, threads>>>(fb, nx, ny,
+                                vec3(-2.0, -1.0, -1.0),
+                                vec3(4.0, 0.0, 0.0),
+                                vec3(0.0, 2.0, 0.0),
+                                vec3(0.0, 0.0, 0.0),
+                                d_world);
+    cudaGetLastError();
     cudaDeviceSynchronize();
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
-    cudaDeviceSynchronize();
-
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
@@ -149,15 +123,13 @@ int main() {
     std::cout << "Wrote output1.ppm (" << nx << "x" << ny << ")" << std::endl;
 
     // clean up
-
-    free_world<<<1,1>>>(d_list,d_world,d_camera);
     cudaDeviceSynchronize();
-    
+    free_world<<<1,1>>>(d_list,d_world);
+    cudaGetLastError();
     cudaFree(d_list);
     cudaFree(d_world);
-    cudaFree(d_camera);
-    cudaFree(d_rand_state);
     cudaFree(fb);
 
+    // useful for cuda-memcheck --leak-check full
     cudaDeviceReset();
 }
