@@ -73,12 +73,22 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
     delete *d_camera;
 }
 
-int main() {
+int main(int argc, char **argv) {
     int nx = 1200;
     int ny = 600;
-    int ns = 100;
+    int ns = 8;  // default value
     int tx = 8;
     int ty = 8;
+
+    // Parse command line arguments
+    if (argc > 1) {
+        ns = std::atoi(argv[1]);
+        if (ns <= 0) {
+            std::cerr << "Error: samples per pixel must be positive\n";
+            std::cerr << "Usage: " << argv[0] << " [samples_per_pixel]\n";
+            return 1;
+        }
+    }
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
