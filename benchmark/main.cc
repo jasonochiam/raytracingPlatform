@@ -19,6 +19,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <chrono>
 
 int main() {
     hittable_list world;
@@ -51,7 +52,13 @@ int main() {
     std::streambuf *coutbuf = std::cout.rdbuf(); // Save old buf
     std::cout.rdbuf(outfile.rdbuf()); // Redirect std::cout to image.ppm
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     cam.render(world);
 
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    
     std::cout.rdbuf(coutbuf); // Reset to standard output
+    std::cout << "RTIOW Benchmark Time: " << duration.count() << " ms" << std::endl;
 }

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <chrono>
 
 #define IMAGEX 800
 #define IMAGEY 600
@@ -46,6 +47,9 @@ int main(){
 
     // Light direction for simple Lambertian shading
     glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // Benchmark: Start Timer
+    auto start = std::chrono::high_resolution_clock::now();
 
     for (int y = 0; y < IMAGEY; y++){
         for (int x = 0; x < IMAGEX; x++){
@@ -101,19 +105,11 @@ int main(){
 
     std::cout << "Wrote output1.ppm (" << IMAGEX << "x" << IMAGEY << ")" << std::endl;
 
-    // If running in VS Code terminal, open the file there
-    const char* vscode_ipc_path = std::getenv("VSCODE_IPC_HOOK_CLI");
-    if (vscode_ipc_path) {
-        std::cout << "Opening output1.ppm in VS Code..." << std::endl;
+    // Benchmark: Stop Timer
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    std::cout << "My Engine Render Time: " << duration.count() << " ms" << std::endl;
+
+    std::cout << "Opening output1.ppm in VS Code..." << std::endl;
         std::system("code output1.ppm");
-    } else {
-        // Else open using OS-specific commands
-        #if defined(_WIN32) || defined(_WIN64)
-            std::system("start output1.ppm");
-        #elif defined(__APPLE__)
-            std::system("open output1.ppm");
-        #else
-            std::system("xdg-open output1.ppm");
-        #endif
-    }
 }
